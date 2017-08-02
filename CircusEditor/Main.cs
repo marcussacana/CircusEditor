@@ -148,10 +148,12 @@ namespace CircusEditor
             for (uint i = ByteCodeStart; i < Script.Length; i++)
                 if (EqualsAt(SrhPrx, i)) {
                     uint Pos = (i + (uint)SrhPrx.Length) - 1;//0x53
-                    while (Script[Pos] != 0x53) {
+                    while (Script[Pos] == 0x53) {
 
                         while (Script[Pos] != 0x00)//skip label name
                             Pos++;
+
+                        Pos++;//Skip 0x00
 
                         if (Script[Pos++] != 0x62) //check choice text prefix
                             break;
@@ -160,6 +162,8 @@ namespace CircusEditor
 
                         while (Script[Pos] != 0x00)//Skip choice text
                             Pos++;
+
+                        Pos++;//Skip 0x00
                     }
                 }
         }
