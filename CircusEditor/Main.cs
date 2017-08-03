@@ -137,10 +137,14 @@ namespace CircusEditor
             Sufix.CopyTo(Script, Prefix.LongLength + String.LongLength);
         }
 
-        /*
-         00 61 04 < String prefix //0x04 isn't part of the bytecode
+        /*D.S.
+         00 61 04 < String prefix, 0x04 isn't part of the bytecode
          08 01 00 53 < Choice prefix: //0x53 = First option part
          format: (label\x0062ChoiceText(\x0053 = more option, \0x0009 = no more option))
+        */
+        /*DC3
+         00 50 61 < String Prefix, 0x61 isn't a part of the bytecode
+         00 61 < Char Name
         */
         private void FindStrings() {
             Offsets = new List<uint>();
@@ -156,14 +160,13 @@ namespace CircusEditor
                 }
 
            //Search Strings - Type 2 (DC3)
-            SrhPrx = new byte[] { 0x00, 0x03 };//Bytecode 0x0061
+            SrhPrx = new byte[] { 0x00, 0x50, 0x61 };//Bytecode 0x0050
             for (uint i = ByteCodeStart; i < Script.Length-2; i++)
                 if (EqualsAt(SrhPrx, i) && (Script[i+2] != 0x00 || Script[i+3] != 0x00)) {
-                    i += 4;
-                    if (Script[i] != 0x50 || Script[i + 1] <= 0x3)
-                        continue;
-                    Offsets.Add(i + 1);//0x50
+                    Offsets.Add(i + (uint)SrhPrx.Length - 1);//0x61
                 }
+            
+
 
             //Search Names - (DC3)
             SrhPrx = new byte[] { 0x00, 0x4F };//Bytecode 0x0061
