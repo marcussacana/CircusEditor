@@ -33,10 +33,12 @@ namespace CircusEditor
             this.Script = Script;
         }
 
-
+        //This char bellow isn't a default space, if the game don't work with $ as space, try this char.
+        //"　" 
         public string[] Import() {
             FindStrings();
 
+            Again:;
             List<string> Strings = new List<string>();
             Prefix = new List<string>();
             Sufix = new List<string>();
@@ -47,14 +49,24 @@ namespace CircusEditor
                     Buffer.Add((byte)((Byte + 0x20) & 0xFF));
                 }
                 string Str = Encoding.GetString(Buffer.ToArray());
+                List<string> BlackList = new List<string>() { "_", "�" };
+                if (string.IsNullOrWhiteSpace(Str)) {
+                    Offsets.Remove(Offset);
+                    goto Again;
+                }
+                foreach (string Corrupt in BlackList)
+                    if (Str.Contains(Corrupt)) {
+                        Offsets.Remove(Offset);
+                        goto Again;
+                    }
 
                 string Tmp = Str.TrimStart('$');
-                string Prefix = Str.Substring(0, Str.Length - Tmp.Length);
+                string StrPrefix = Str.Substring(0, Str.Length - Tmp.Length);
 
-                Tmp = Str.TrimEnd('$');
-                string Sufix = Str.Substring(Str.Length - (Str.Length - Tmp.Length), (Str.Length - Tmp.Length));
+                Tmp = Str.TrimEnd('$', '　');
+                string StrSufix = Str.Substring(Str.Length - (Str.Length - Tmp.Length), (Str.Length - Tmp.Length));
 
-                Str = Str.Trim('$').Replace("$", @" ");
+                Str = Str.Trim('$', '　').Replace("$", @" ");
 
                 if (Filter) {
                     while (Str.StartsWith("@")) {
@@ -63,11 +75,11 @@ namespace CircusEditor
                             Len++;
                         while ((Str[Len] >= '0' && Str[Len] <= '9'))
                             Len++;
-                        Prefix += Str.Substring(0, Len);
+                        StrPrefix += Str.Substring(0, Len);
                         Str = Str.Substring(Len, Str.Length - Len);
                     }
                     while (Str.EndsWith("#h")) {
-                        Sufix = "#h" + Sufix;
+                        StrSufix = "#h" + StrSufix;
                         Str = Str.Substring(0, Str.Length - 2);
                     }
                 }
@@ -75,8 +87,8 @@ namespace CircusEditor
                 Strings.Add(Str);
 
 
-                this.Prefix.Add(Prefix);
-                this.Sufix.Add(Sufix);
+                Prefix.Add(StrPrefix);
+                Sufix.Add(StrSufix);
             }
             return Strings.ToArray();
         }
@@ -86,13 +98,13 @@ namespace CircusEditor
             Script.CopyTo(OutScript, 0);
 
             //Allow long index
-            string[] Prefix = this.Prefix.ToArray();
-            string[] Sufix = this.Sufix.ToArray();
+            string[] ArrPrefix = Prefix.ToArray();
+            string[] ArrSufix = Sufix.ToArray();
             uint[] Offsets = this.Offsets.ToArray();
 
             //Reverse Replace to prevent miss the pointer
             for (long i = Strings.LongLength - 1; i >= 0; i--) {
-                byte[] Buffer = Encoding.GetBytes(Prefix[i] + Strings[i].Replace(@" ", "$") + Sufix[i]);
+                byte[] Buffer = Encoding.GetBytes(ArrPrefix[i] + Strings[i].Replace(@" ", "$") + ArrSufix[i]);
                 for (uint x = 0; x < Buffer.LongLength; x++)
                     Buffer[x] -= 0x20;
                 ReplaceStrAt(ref OutScript, Buffer, Offsets[i]);
@@ -136,11 +148,31 @@ namespace CircusEditor
             if (ByteCodeStart >= Script.Length)
                 throw new Exception("This isn't a valid MES Script.");
 
-            //Search Strings
+            //Search Strings - Type 1 (D.S)
             byte[] SrhPrx = new byte[] { 0x00, 0x61, 0x04 };//Bytecode 0x0061
             for (uint i = ByteCodeStart; i < Script.Length; i++)
                 if (EqualsAt(SrhPrx, i)) {
                     Offsets.Add((i + (uint)SrhPrx.Length) - 1);//0x04
+                }
+
+           //Search Strings - Type 2 (DC3)
+            SrhPrx = new byte[] { 0x00, 0x03 };//Bytecode 0x0061
+            for (uint i = ByteCodeStart; i < Script.Length-2; i++)
+                if (EqualsAt(SrhPrx, i) && (Script[i+2] != 0x00 || Script[i+3] != 0x00)) {
+                    i += 4;
+                    if (Script[i] != 0x50 || Script[i + 1] <= 0x3)
+                        continue;
+                    Offsets.Add(i + 1);//0x50
+                }
+
+            //Search Names - (DC3)
+            SrhPrx = new byte[] { 0x00, 0x4F };//Bytecode 0x0061
+            for (uint i = ByteCodeStart; i < Script.Length - 2; i++)
+                if (EqualsAt(SrhPrx, i) && (Script[i + 2] != 0x00 || Script[i + 3] != 0x00)) {
+                    i += 2;
+                    if (Script[i] <= 0x3 || Script[i + 1] <= 0x3 || Script[i + 2] <= 0x3)
+                        continue;
+                    Offsets.Add(i);
                 }
 
             //Search Choice Strings
@@ -166,6 +198,9 @@ namespace CircusEditor
                         Pos++;//Skip 0x00
                     }
                 }
+            uint[] offs = Offsets.ToArray();
+            Array.Sort(offs);
+            Offsets = new List<uint>(offs);
         }
 
         private bool EqualsAt(byte[] DataToCompare, uint At) {
