@@ -178,6 +178,28 @@ namespace CircusEditor
                     Offsets.Add(i);
                 }
 
+
+            //Search Text - (EXA)
+            SrhPrx = new byte[] { 0x00, 0x4C };
+            for (uint i = ByteCodeStart; i < Script.Length - 2; i++)
+                if (EqualsAt(SrhPrx, i) && (Script[i + 2] != 0x00 || Script[i + 3] != 0x00)) {
+                    i += 2;
+                    if (Script[i] <= 0x3 || Script[i + 1] <= 0x3 || Script[i + 2] <= 0x3)
+                        continue;
+                    Offsets.Add(i);
+                }           
+            
+            //Search Text - (EXS)
+            SrhPrx = new byte[] { 0x00, 0x4E };
+            for (uint i = ByteCodeStart; i < Script.Length - 2; i++)
+                if (EqualsAt(SrhPrx, i) && (Script[i + 2] != 0x00 || Script[i + 3] != 0x00)) {
+                    i += 2;
+                    if (Script[i] <= 0x3 || Script[i + 1] <= 0x3 || Script[i + 2] <= 0x3)
+                        continue;
+                    Offsets.Add(i);
+                }
+
+
             //Search Choice Strings
             SrhPrx = new byte[] { 0x08, 0x01, 0x00, 0x53 };//Bytecode 0x080100
             for (uint i = ByteCodeStart; i < Script.Length; i++)
