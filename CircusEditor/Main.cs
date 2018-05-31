@@ -24,7 +24,10 @@ namespace CircusEditor
         private byte[] Script;
         public Encoding Encoding = Encoding.GetEncoding(932);
         public bool Filter = true;
-        
+        public byte Obfuscation = 0x20;//General Games
+        //public byte Obfuscation = 0x01;//Some Games, Newer?
+
+
         public MesEditor(byte[] Script, bool StringFilter) {
             Filter = StringFilter;
             this.Script = Script;
@@ -46,7 +49,7 @@ namespace CircusEditor
                 List<byte> Buffer = new List<byte>();
                 while (Script[Offset + Buffer.Count()] != 0x00) {
                     byte Byte = Script[Offset + Buffer.Count()];
-                    Buffer.Add((byte)((Byte + 0x20) & 0xFF));
+                    Buffer.Add((byte)((Byte + Obfuscation) & 0xFF));
                 }
                 string Str = Encoding.GetString(Buffer.ToArray());
                 List<string> BlackList = new List<string>() { "_", "�" };
@@ -66,9 +69,14 @@ namespace CircusEditor
                 Tmp = Str.TrimEnd('$', '　');
                 string StrSufix = Str.Substring(Str.Length - (Str.Length - Tmp.Length), (Str.Length - Tmp.Length));
 
-                Str = Str.Trim('$', '　').Replace("$", @" ");
+                if (Obfuscation >= 0x20)
+                    Str = Str.Trim('$', '　').Replace("$", @" ");
 
                 if (Filter) {
+                    Str = Str.Replace("@-", "");//underlined?
+                    Str = Str.Replace("@i", "");//Italic?
+                    Str = Str.Replace("@b", "");//Bold?
+
                     while (Str.StartsWith("@")) {
                         int Len = 1;
                         while (!(Str[Len] >= '0' && Str[Len] <= '9'))
@@ -104,9 +112,9 @@ namespace CircusEditor
 
             //Reverse Replace to prevent miss the pointer
             for (long i = Strings.LongLength - 1; i >= 0; i--) {
-                byte[] Buffer = Encoding.GetBytes(ArrPrefix[i] + Strings[i].Replace(@" ", "$") + ArrSufix[i]);
+                byte[] Buffer = Encoding.GetBytes(ArrPrefix[i] + (Obfuscation >= 0x20 ? Strings[i].Replace(@" ", "$") : Strings[i]) + ArrSufix[i]);
                 for (uint x = 0; x < Buffer.LongLength; x++)
-                    Buffer[x] -= 0x20;
+                    Buffer[x] -= Obfuscation;
                 ReplaceStrAt(ref OutScript, Buffer, Offsets[i]);
             }
 
@@ -153,17 +161,17 @@ namespace CircusEditor
                 throw new Exception("This isn't a valid MES Script.");
 
             //Search Strings - Type 1 (D.S)
-            byte[] SrhPrx = new byte[] { 0x00, 0x61, 0x04 };//Bytecode 0x0061
+            byte[] SrhPrx = new byte[] { 0x00, 0x61 };//Bytecode 0x0061
             for (uint i = ByteCodeStart; i < Script.Length; i++)
                 if (EqualsAt(SrhPrx, i)) {
-                    Offsets.Add((i + (uint)SrhPrx.Length) - 1);//0x04
+                    Offsets.Add((i + (uint)SrhPrx.Length));
                 }
 
            //Search Strings - Type 2 (DC3)
-            SrhPrx = new byte[] { 0x00, 0x50, 0x61 };//Bytecode 0x0050
+            SrhPrx = new byte[] { 0x00, 0x50 };//Bytecode 0x0050
             for (uint i = ByteCodeStart; i < Script.Length-2; i++)
                 if (EqualsAt(SrhPrx, i) && (Script[i+2] != 0x00 || Script[i+3] != 0x00)) {
-                    Offsets.Add(i + (uint)SrhPrx.Length - 1);//0x61
+                    Offsets.Add(i + (uint)SrhPrx.Length);
                 }
             
 
@@ -223,7 +231,7 @@ namespace CircusEditor
                         Pos++;//Skip 0x00
                     }
                 }
-            uint[] offs = Offsets.ToArray();
+            uint[] offs = (from x in Offsets where ValidString(x) select x).ToArray();
             Array.Sort(offs);
             Offsets = new List<uint>(offs);
         }
@@ -242,6 +250,33 @@ namespace CircusEditor
             for (int i = 0; i < Arr.Length; i++)
                 Arr[i] = Script[i + At];
             return BitConverter.ToUInt32(Arr, 0);
+        }
+
+
+
+        //Check if the string contains bytes out of bounds from sjis encoding
+        private bool ValidString(uint At) {
+            bool Result = true;
+            //return Result; //Enable the filter commenting this command
+            byte Last = 0;
+            int Len = 0;
+            for (uint i = At; i < Script.Length; i++) {
+                byte b = Script[i];
+                if (b == 0)
+                    break;
+                byte Real = (byte)((b + Obfuscation) & 0xFF);
+                if (!(Last >= 0x81 && Last <= 0xEE)) {
+                    if (!(Real >= 0x81 || Real <= 0xEE))
+                        if ((Real < 0x20 || Real > 0x7F) && Real != '\n') {
+                            Result = false;
+                            break;
+                        }
+                }
+                Len++;
+                Last = Real;
+            }
+
+            return Result && Len >= 2;
         }
     }
 }

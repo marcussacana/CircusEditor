@@ -45,6 +45,7 @@ namespace CEGUI {
         private void listBox1_SelectedIndexChanged(object sender, EventArgs e) {
             try {
                 textBox1.Text = listBox1.Items[listBox1.SelectedIndex].ToString();
+                Text = "id: " + listBox1.SelectedIndex;
             } catch { }
         }
 
