@@ -155,6 +155,7 @@ namespace CircusEditor
          00 61 < Char Name
         */
         private void FindStrings() {
+            var OffsetsBak = new List<uint>();
             Offsets = new List<uint>();
             uint ByteCodeStart = GetUintAt(0) * 4;
             if (ByteCodeStart >= Script.Length)
@@ -173,8 +174,9 @@ namespace CircusEditor
                 if (EqualsAt(SrhPrx, i) && (Script[i+2] != 0x00 || Script[i+3] != 0x00)) {
                     Offsets.Add(i + (uint)SrhPrx.Length);
                 }
-            
 
+            OffsetsBak = Offsets.ToList();
+            Offsets.Clear();
 
             //Search Names - (DC3)
             SrhPrx = new byte[] { 0x00, 0x4F };//Bytecode 0x0061
@@ -186,6 +188,14 @@ namespace CircusEditor
                     Offsets.Add(i);
                 }
 
+            bool Valid = (from x in OffsetsBak where ValidString(x) select x).Count() < (from x in Offsets where ValidString(x) select x).Count();
+            if (!Valid)
+                Offsets = OffsetsBak;
+
+
+            OffsetsBak = Offsets.ToList();
+            Offsets.Clear();
+
 
             //Search Text - (EXA)
             SrhPrx = new byte[] { 0x00, 0x4C };
@@ -195,8 +205,16 @@ namespace CircusEditor
                     if (Script[i] <= 0x3 || Script[i + 1] <= 0x3 || Script[i + 2] <= 0x3)
                         continue;
                     Offsets.Add(i);
-                }           
-            
+                }
+
+            Valid = (from x in OffsetsBak where ValidString(x) select x).Count() < (from x in Offsets where ValidString(x) select x).Count();
+            if (!Valid)
+                Offsets = OffsetsBak;
+
+
+            OffsetsBak = Offsets.ToList();
+            Offsets.Clear();
+
             //Search Text - (EXS)
             SrhPrx = new byte[] { 0x00, 0x4E };
             for (uint i = ByteCodeStart; i < Script.Length - 2; i++)
@@ -207,6 +225,31 @@ namespace CircusEditor
                     Offsets.Add(i);
                 }
 
+
+            Valid = (from x in OffsetsBak where ValidString(x) select x).Count() < (from x in Offsets where ValidString(x) select x).Count();
+            if (!Valid)
+                Offsets = OffsetsBak;
+
+
+            OffsetsBak = Offsets.ToList();
+            Offsets.Clear();
+
+            //Search Text - (TPR)
+            SrhPrx = new byte[] { 0x00, 0x00, 0x03 };
+            for (uint i = ByteCodeStart; i < Script.Length - 2; i++)
+                if (EqualsAt(SrhPrx, i) && (Script[i + 5] != 0x00 || Script[i + 6] != 0x00)) {
+                    i += 5;
+                    if (Script[i] <= 0x3 || Script[i + 1] <= 0x3 || Script[i + 2] <= 0x3)
+                        continue;
+                    Offsets.Add(i);
+                }
+
+
+            Valid = (from x in OffsetsBak where ValidString(x) select x).Count() < 
+                (from x in Offsets
+                 where ValidString(x) select x).Count();
+            if (!Valid)
+                Offsets = OffsetsBak;
 
             //Search Choice Strings
             SrhPrx = new byte[] { 0x08, 0x01, 0x00, 0x53 };//Bytecode 0x080100
@@ -276,7 +319,59 @@ namespace CircusEditor
                 Last = Real;
             }
 
-            return Result && Len >= 2;
+            Result &= Len >= 2;
+
+            byte[] Arr = (from x in Script.Skip((int)At).Take(Len) select (byte)(x + Obfuscation)).ToArray();
+            string Str = Encoding.GetString(Arr);
+            if (Result) {
+                List<Range> AllowedRangesA = new List<Range>() {
+                    Range.Katakana,
+                    Range.Hiragana,
+                    Range.KatakanaPhoneticExtensions,
+                    Range.CJKUnifiedIdeographs,
+                    Range.GeneralPunctuation,
+                    Range.CJKSymbolsAndPunctuation,
+                    Range.HalfwidthAndFullwidthForms
+                };
+                List<Range> AllowedRangesB = new List<Range>() {
+                    Range.BasicLatin,
+                    Range.LatinExtendedA
+                };
+                int Missmatch = 0;
+                foreach (char c in Str) {
+                    if (UnicodeRanges.IsUnprintable(c)) {
+                        Result = false;
+                        break;
+                    }
+                    if (!AllowedRangesA.Contains(UnicodeRanges.GetRange(c))) {
+                        Missmatch++;
+                    }
+                }
+
+                if (Missmatch >= Str.Length / 3)
+                    Result = false;
+
+                if (!Result) {
+                    Result = true;
+                    Missmatch = 0;
+
+                    foreach (char c in Str) {
+                        if (UnicodeRanges.IsUnprintable(c)) {
+                            Result = false;
+                            break;
+                        }
+                        if (!AllowedRangesB.Contains(UnicodeRanges.GetRange(c))) {
+                            Missmatch++;
+                            break;
+                        }
+                    }
+
+                    if (Missmatch >= Str.Length / 3)
+                        Result = false;
+                }
+            }
+
+            return Result;
         }
     }
 }
